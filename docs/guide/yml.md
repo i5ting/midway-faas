@@ -311,6 +311,160 @@ functions:
 
 **FC 在未绑定自定义域名时，无法解析 path，只能通过自动生成的路由访问。**
 
+## serve
+
+serve 作为 runtime 的扩展能力，用于将指定的目录内的文件进行 HTTP 托管。
+
+### 字段描述
+
+serve 是一个由2个 核心参数 组成，参考 serve-static 模块。
+
+| **LayersStructure** |  |  |
+| --- | --- | --- |
+| root | string | 托管目录 |
+| opts | string | 配置项 |
+| opts.maxage | number | Browser cache max-age in milliseconds. defaults to 0 |
+| opts.hidden | boolean | Allow transfer of hidden files. defaults to false |
+| opts.index | string | Default file name, defaults to 'index.html' |
+| opts.gzip | boolean | try to serve the gzipped version of a file automatically when gzip is supported |
+
+### 示例
+
+```yaml
+functions:
+  home:
+    handler: index.handler
+    serve
+        root: dist
+        opts
+            maxage: 0
+            hidden: false
+            index: index.html
+            gzip: true
+```
+
+## render
+
+render 作为 runtime 的渲染层扩展能力，用于在不同层面扩展 runtime 的接口。
+
+### 单组件扩展支持
+
+路由由f.yml的配置文件中，所以在f.yml增加render配置扩展，具体如下。
+
+```
+functions:
+  home:
+    handler: index.handler
+    render: 
+      - loader: npm:@ali/ssr@latest
+      - component: src.home.index
+      - layout: src.home.layout
+      - fetch: src.home.fetch
+      - mode: ssr | csr（默认ssr）
+      - injectScript（自己改loyout更好）
+          - runtime~Page.js
+          - vendor.chunk.js
+          - Page.chunk.js
+      - injectCSS
+          - Page.chunk.css
+      - serverBundle: Page.server.js
+    events:
+      - http:
+          path: /
+          method:
+            - GET
+```
+
+### 多组件扩展支持
+
+多组件支持是基于 Bigpipe 的方式，首先写入布局（layout），然后处理多个组件的组合逻辑，最终响应结束（res.end）即可。另外，组件上如果只有fetch方法，没有render方法也是没有问题的。写法有2种，具体如下。
+
+component的值是数组，即串行方式
+
+```js
+functions:
+  news:
+    handler: index.handler
+    render: 
+      - loader: npm:@ali/ssr@latest
+      - component: 
+        - src.news.index
+        - src.news.index
+        - src.news.index3
+      - layout: src.news.layout
+      - fetch: src.news.fetch
+      - mode: ssr | csr（默认ssr）
+    events:
+      - http:
+          path: /
+          method:
+            - GET
+```
+
+component的值是对象，即并行方式
+
+```js
+functions:
+  news:
+    handler: index.handler
+    render: 
+      - loader: npm:@ali/ssr@latest
+      - component: 
+        a: src.news.index
+        b: src.news.index
+        c: src.news.index3
+      - layout: src.news.layout
+      - fetch: src.news.fetch
+      - mode: ssr | csr（默认ssr）
+    events:
+      - http:
+          path: /
+          method:
+            - GET
+```
+
+component支持无限嵌套，可以支持所有场景。
+
+执行过程说明：
+
+- ssr模式时，采用bigpipe写入，最后red.end即可，前端不需要改造。
+- csr模式时，采用高阶组件封住，入口侧多个组件遍历，此处需要改造。
+
+### 自定义扩展支持
+
+自定义扩展支持，支持多种模板，以及自定义模板。
+
+```js
+functions:
+  news:
+    handler: index.handler
+    render: 
+      - loader
+        - ejs: npm:ejs
+        - pug: npm:pug
+    events:
+      - http:
+          path: /
+          method:
+            - GET
+```
+
+代码
+   
+```
+export class IndexHandler {
+
+  @Render('./static/layout.html', 'ejs')
+  async hander() {
+    return {
+      g_config: '',
+      title: ''
+    }
+  }
+}
+```
+
+@Render是渲染函数，默认第一个参数以后缀名来判断加载loader，如果后缀和loader名不一致，可以指定第二个参数，即模板引擎名称。
 
 ## layers
 
@@ -397,3 +551,5 @@ aggregation:									# 聚合部署，详细内容请查看 聚合部署部分
 ## custom
 
 待定。
+
+
